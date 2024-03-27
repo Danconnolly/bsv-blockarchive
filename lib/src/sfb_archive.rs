@@ -5,12 +5,24 @@ use bitcoinsv::bitcoin::{BlockHash, BlockHeader};
 use tokio::io::AsyncRead;
 use crate::{BlockArchive, Result};
 use hex::{FromHex, ToHex};
-use tokio::fs::File;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReadDirStream;
 use crate::block_archive::{BlockHashListStream, BlockHashListStreamFromChannel};
 
 /// A simple file-based block archive.
+///
+/// Blocks are stored in a directory structure based on the block hash. The first level of directories
+/// is based on the last two characters of the hash, the second level is based on the third and fourth
+/// characters, and the block is stored in a file named after the hash.
+///
+/// Example: /31/c5/00000000000000000124a294b9e1e65224f0636ffd4dadac777bed5e709dc531.bin
+///
+/// This is simplistic to get started. It is not efficient for large numbers of small blocks.
+///
+/// Example code:
+///     let root_dir = std::path::PathBuf::from("/mnt/blockstore/mainnet");
+///     let mut archive= SimpleFileBasedBlockArchive::new(root_dir);
+///     let mut results = archive.block_list().await.unwrap();
 pub struct SimpleFileBasedBlockArchive
 {
     /// The root of the file store
@@ -99,6 +111,7 @@ mod tests {
     use hex::FromHex;
     use super::*;
 
+    // Test the path generation from a block hash.
     #[test]
     fn check_path_from_hash() {
         let s = SimpleFileBasedBlockArchive::new(PathBuf::from("/"));

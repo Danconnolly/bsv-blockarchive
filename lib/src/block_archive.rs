@@ -17,6 +17,8 @@ use crate::Result;
 #[async_trait]
 pub trait BlockArchive {
     /// Get a block from the archive.
+    ///
+    /// Returns a reader for the encoded block.
     async fn get_block<R>(&self, block_hash: BlockHash) -> Result<R>
         where R: AsyncRead + Unpin + Send + 'async_trait;
 
@@ -24,6 +26,8 @@ pub trait BlockArchive {
     async fn block_exists(&self, block_hash: BlockHash) -> Result<bool>;
 
     /// Store a block in the archive.
+    ///
+    /// Expects a reader for the encoded block.
     async fn store_block<S>(&self, block: S) -> Result<()>
         where S: AsyncRead + Unpin + Send + 'async_trait;
 
@@ -37,8 +41,16 @@ pub trait BlockArchive {
     async fn block_list(&mut self) -> Result<Pin<Box<dyn BlockHashListStream<Item=BlockHash>>>>;
 }
 
+/// A stream of block hashes, returned by [BlockArchive::block_list].
+///
+/// Implemented as a trait for future extensibility.
 pub trait BlockHashListStream: Stream<Item = BlockHash> {}
 
+/// An implementation of the [BlockHashListStream] trait.
+///
+/// Built for the SimpleFileBasedBlockArchive but expected to be useful elsewhere.
+/// It expects a background task to be created which sends block hashes to a channel. This stream
+/// reads the block hashes from the channel.
 pub struct BlockHashListStreamFromChannel {
     // The receiver to which the background task sends block hashes.
     receiver: Receiver<BlockHash>,
@@ -47,6 +59,9 @@ pub struct BlockHashListStreamFromChannel {
 }
 
 impl BlockHashListStreamFromChannel {
+    /// Create a new BlockHashListStreamFromChannel, with a receiving end of a channel and a handle
+    /// to the background process. The handle is used to close the background task when the stream
+    /// is dropped.
     pub fn new(receiver: Receiver<BlockHash>, handle: JoinHandle<()>) -> BlockHashListStreamFromChannel {
         BlockHashListStreamFromChannel { receiver, handle }
     }
