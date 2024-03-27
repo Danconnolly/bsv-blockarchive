@@ -20,7 +20,7 @@ pub trait BlockArchive {
     ///
     /// Returns a reader for the encoded block.
     async fn get_block<R>(&self, block_hash: BlockHash) -> Result<R>
-        where R: AsyncRead + Unpin + Send + 'async_trait;
+        where R: AsyncRead + Unpin + Send;
 
     /// Check if a block exists in the archive.
     async fn block_exists(&self, block_hash: BlockHash) -> Result<bool>;
@@ -29,7 +29,7 @@ pub trait BlockArchive {
     ///
     /// Expects a reader for the encoded block.
     async fn store_block<S>(&self, block: S) -> Result<()>
-        where S: AsyncRead + Unpin + Send + 'async_trait;
+        where S: AsyncRead + Unpin + Send;
 
     /// Get the size of a block in the archive.
     async fn block_size(&self, block_hash: BlockHash) -> Result<usize>;

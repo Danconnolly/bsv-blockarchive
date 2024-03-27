@@ -84,7 +84,7 @@ impl BlockArchive for SimpleFileBasedBlockArchive
     }
 
     async fn store_block<S>(&self, block: S) -> Result<()>
-        where S: AsyncRead + Unpin + Send + 'async_trait
+        where S: AsyncRead + Unpin + Send
     {
         todo!()
     }
