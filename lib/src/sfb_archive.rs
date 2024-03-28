@@ -9,11 +9,19 @@ use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReadDirStream;
 use crate::block_archive::{BlockHashListStream, BlockHashListStreamFromChannel};
 
+// the absolute maximum number of blocks that will be stored
+// this is used to limit the size of the channel used to send block hashes
+// at the time of writing, testnet had about 1.2 million blocks
+// if this is too small, the background process will wait for the channel to be read
+const MAX_BLOCKS: usize = 2_000_000;
+
 /// A simple file-based block archive.
 ///
 /// Blocks are stored in a directory structure based on the block hash. The first level of directories
-/// is based on the last two characters of the hash, the second level is based on the third and fourth
-/// characters, and the block is stored in a file named after the hash.
+/// is based on the last two characters of the hex encoded hash, the second level is based on the
+/// third and fourth last characters, and the block is stored in a file named after the hash with a
+/// "bin" extension.
+///
 ///
 /// Example: /31/c5/00000000000000000124a294b9e1e65224f0636ffd4dadac777bed5e709dc531.bin
 ///
@@ -23,8 +31,7 @@ use crate::block_archive::{BlockHashListStream, BlockHashListStreamFromChannel};
 ///     let root_dir = std::path::PathBuf::from("/mnt/blockstore/mainnet");
 ///     let mut archive= SimpleFileBasedBlockArchive::new(root_dir);
 ///     let mut results = archive.block_list().await.unwrap();
-pub struct SimpleFileBasedBlockArchive
-{
+pub struct SimpleFileBasedBlockArchive {
     /// The root of the file store
     pub root_path: PathBuf,
 }
@@ -50,25 +57,29 @@ impl SimpleFileBasedBlockArchive
     }
 
     // Get a list of all blocks in the background, sending results to the channel.
-    async fn block_list_bgrnd(root_path: PathBuf, transmit: tokio::sync::mpsc::Sender<BlockHash>) {
+    async fn block_list_bgrnd(root_path: PathBuf, transmit: tokio::sync::mpsc::Sender<BlockHash>) -> Result<()> {
         let mut stack = Vec::new();
         stack.push(root_path);
         while let Some(path) = stack.pop() {
-            let dir = tokio::fs::read_dir(path).await.unwrap();
+            let dir = tokio::fs::read_dir(path).await?;
             let mut stream = ReadDirStream::new(dir);
             // it would be fun to spawn a new task for each directory, but that would be a bit daft
             while let Some(entry) = stream.next().await {
-                let entry = entry.unwrap();
+                let entry = entry?;
                 let path = entry.path();
                 if path.is_dir() {
                     stack.push(path);
                 } else {
                     let f_name = path.file_stem().unwrap().to_str().unwrap();
-                    let h = BlockHash::from_hex(f_name).unwrap();
-                    transmit.send(h).await.unwrap();
+                    let h = BlockHash::from_hex(f_name)?;
+                    match transmit.send(h).await {
+                        Ok(_) => {}
+                        Err(_) => return Ok(())     // this is not an error, the receiver has merely dropped
+                    }
                 }
             }
         }
+        Ok(())
     }
 }
 
@@ -99,7 +110,8 @@ impl BlockArchive for SimpleFileBasedBlockArchive
 
     async fn block_list(&mut self) -> Result<Pin<Box<dyn BlockHashListStream<Item=BlockHash>>>> {
         // make the channel large enough to buffer all hashes, including testnet
-        let (tx, rx) = tokio::sync::mpsc::channel(2_000_000);
+        // so that the background task can collect all buffer hashes despite how slow the consumer is
+        let (tx, rx) = tokio::sync::mpsc::channel(MAX_BLOCKS);
         let handle = tokio::spawn(Self::block_list_bgrnd(self.root_path.clone(), tx));
         Ok(Box::pin(BlockHashListStreamFromChannel::new(rx, handle)))
     }

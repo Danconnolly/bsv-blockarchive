@@ -55,14 +55,14 @@ pub struct BlockHashListStreamFromChannel {
     // The receiver to which the background task sends block hashes.
     receiver: Receiver<BlockHash>,
     // Handle to the background task that reads the block hashes.
-    handle: JoinHandle<()>,
+    handle: JoinHandle<Result<()>>,
 }
 
 impl BlockHashListStreamFromChannel {
     /// Create a new BlockHashListStreamFromChannel, with a receiving end of a channel and a handle
     /// to the background process. The handle is used to close the background task when the stream
     /// is dropped.
-    pub fn new(receiver: Receiver<BlockHash>, handle: JoinHandle<()>) -> BlockHashListStreamFromChannel {
+    pub fn new(receiver: Receiver<BlockHash>, handle: JoinHandle<Result<()>>) -> BlockHashListStreamFromChannel {
         BlockHashListStreamFromChannel { receiver, handle }
     }
 }
