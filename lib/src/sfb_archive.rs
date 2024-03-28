@@ -30,7 +30,7 @@ const MAX_BLOCKS: usize = 2_000_000;
 /// Example code:
 ///     let root_dir = std::path::PathBuf::from("/mnt/blockstore/mainnet");
 ///     let mut archive= SimpleFileBasedBlockArchive::new(root_dir);
-///     let mut results = archive.block_list().await.unwrap();
+#[derive(Debug)]
 pub struct SimpleFileBasedBlockArchive {
     /// The root of the file store
     pub root_path: PathBuf,
@@ -39,9 +39,17 @@ pub struct SimpleFileBasedBlockArchive {
 impl SimpleFileBasedBlockArchive
 {
     /// Create a new block archive with the given root path.
-    pub fn new(root_path: PathBuf) -> SimpleFileBasedBlockArchive {
-        SimpleFileBasedBlockArchive {
-            root_path,
+    pub async fn new(root_path: PathBuf) -> Result<SimpleFileBasedBlockArchive> {
+        // Check if the root_path is accessible
+        match tokio::fs::metadata(&root_path).await {
+            Ok(_) => {
+                Ok(SimpleFileBasedBlockArchive {
+                    root_path,
+                })
+            },
+            Err(e) => {
+                Err(e.into()) // Convert the error into your custom error type
+            }
         }
     }
 
@@ -70,12 +78,21 @@ impl SimpleFileBasedBlockArchive
                 if path.is_dir() {
                     stack.push(path);
                 } else {
-                    let f_name = path.file_stem().unwrap().to_str().unwrap();
-                    let h = BlockHash::from_hex(f_name)?;
-                    match transmit.send(h).await {
-                        Ok(_) => {}
-                        Err(_) => return Ok(())     // this is not an error, the receiver has merely dropped
+                    // ignore files which are not .bin files
+                    if path.extension().is_none() || path.extension().unwrap() != "bin" {
+                        continue;
                     }
+                    let f_name = path.file_stem().unwrap().to_str().unwrap();
+                    match BlockHash::from_hex(f_name) {
+                        Ok(h) => {
+                            match transmit.send(h).await {
+                                Ok(_) => {}
+                                Err(_) => return Ok(())     // this is not an error, the receiver has merely dropped
+                            }
+                        }
+                        // ignore files which are not valid block hashes
+                        Err(_) => continue
+                    };
                 }
             }
         }
@@ -124,11 +141,45 @@ mod tests {
     use super::*;
 
     // Test the path generation from a block hash.
-    #[test]
-    fn check_path_from_hash() {
-        let s = SimpleFileBasedBlockArchive::new(PathBuf::from("/"));
+    #[tokio::test]
+    async fn check_path_from_hash() {
+        let s = SimpleFileBasedBlockArchive::new(PathBuf::from("../test_data/blockarchive")).await.unwrap();
         let h = BlockHash::from_hex("00000000000000000124a294b9e1e65224f0636ffd4dadac777bed5e709dc531").unwrap();
         let path = s.get_path_from_hash(h);
-        assert_eq!(path, PathBuf::from("/31/c5/00000000000000000124a294b9e1e65224f0636ffd4dadac777bed5e709dc531.bin"));
+        assert_eq!(path, PathBuf::from("../test_data/blockarchive/31/c5/00000000000000000124a294b9e1e65224f0636ffd4dadac777bed5e709dc531.bin"));
+    }
+
+    // Test the block list function.
+    #[tokio::test]
+    async fn test_block_list() {
+        let root = PathBuf::from("../test_data/blockarchive");
+        let mut archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
+        let mut results = archive.block_list().await.unwrap();
+        let mut count = 0;
+        while let Some(_) = results.next().await {
+            count += 1;
+        }
+        assert_eq!(count, 4);
+    }
+
+    // Test the block list function with no blocks.
+    #[tokio::test]
+    async fn test_empty_block_list() {
+        let root = PathBuf::from("../test_data/emptyarchive");
+        let mut archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
+        let mut results = archive.block_list().await.unwrap();
+        let mut count = 0;
+        while let Some(_) = results.next().await {
+            count += 1;
+        }
+        assert_eq!(count, 0);
+    }
+
+    // Test the block list function with a non-existent directory.
+    #[tokio::test]
+    async fn test_non_existent_block_list() {
+        let root = PathBuf::from("../test_data/nonexistent");
+        let mut archive = SimpleFileBasedBlockArchive::new(root).await;
+        assert!(archive.is_err());
     }
 }

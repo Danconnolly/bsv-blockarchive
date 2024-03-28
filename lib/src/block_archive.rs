@@ -38,6 +38,14 @@ pub trait BlockArchive {
     async fn block_header(&self, block_hash: BlockHash) -> Result<BlockHeader>;
 
     /// Get a list of all the blocks in the archive.
+    ///
+    /// It returns a stream of block hashes.
+    ///
+    /// Example code:
+    ///     let mut results = archive.block_list().await.unwrap();
+    ///     while let Some(block_hash) = results.next().await {
+    ///       println!("{}", block_hash);
+    ///     }
     async fn block_list(&mut self) -> Result<Pin<Box<dyn BlockHashListStream<Item=BlockHash>>>>;
 }
 
