@@ -15,7 +15,7 @@ struct Args {
 async fn main() {
     let args: Args = Args::parse();
     let root_dir = std::path::PathBuf::from(args.root_dir);
-    let mut archive= SimpleFileBasedBlockArchive::new(root_dir);
+    let mut archive= SimpleFileBasedBlockArchive::new(root_dir).await.unwrap();
     let mut results = archive.block_list().await.unwrap();
     while let Some(block_hash) = results.next().await {
         println!("{}", block_hash);

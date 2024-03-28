@@ -175,9 +175,9 @@ mod tests {
         assert_eq!(count, 0);
     }
 
-    // Test the block list function with a non-existent directory.
+    // Test the archive with a non-existent root directory.
     #[tokio::test]
-    async fn test_non_existent_block_list() {
+    async fn test_non_existent_root_dir() {
         let root = PathBuf::from("../test_data/nonexistent");
         let mut archive = SimpleFileBasedBlockArchive::new(root).await;
         assert!(archive.is_err());
