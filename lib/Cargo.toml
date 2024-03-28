@@ -10,7 +10,7 @@ homepage = "https://github.com/Danconnolly/bsv-blockarchive/"
 repository = "https://github.com/Danconnolly/bsv-blockarchive/"
 description = "A block archive for Bitcoin SV"
 keywords = ["bitcoin-sv"]
-readme = "README.md"
+readme = "../README.md"
 
 [dependencies]
 bitcoinsv = "0.2.4"
