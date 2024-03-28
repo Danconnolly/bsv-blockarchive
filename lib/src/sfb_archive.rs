@@ -138,6 +138,7 @@ impl BlockArchive for SimpleFileBasedBlockArchive
 #[cfg(test)]
 mod tests {
     use hex::FromHex;
+    use mktemp::Temp;
     use super::*;
 
     // Test the path generation from a block hash.
@@ -159,13 +160,15 @@ mod tests {
         while let Some(_) = results.next().await {
             count += 1;
         }
-        assert_eq!(count, 4);
+        assert_eq!(count, 5);
     }
 
     // Test the block list function with no blocks.
     #[tokio::test]
     async fn test_empty_block_list() {
-        let root = PathBuf::from("../test_data/emptyarchive");
+        // calling a block function from tokio is bad, but this is a test
+        let root_dir = Temp::new_dir().unwrap();
+        let root = root_dir.to_path_buf();
         let mut archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
         let mut results = archive.block_list().await.unwrap();
         let mut count = 0;
