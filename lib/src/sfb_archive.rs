@@ -3,8 +3,9 @@ use std::pin::Pin;
 use async_trait::async_trait;
 use bitcoinsv::bitcoin::{BlockHash, BlockHeader};
 use tokio::io::AsyncRead;
-use crate::{BlockArchive, Result};
+use crate::{BlockArchive, Error, Result};
 use hex::{FromHex, ToHex};
+use tokio::fs::File;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReadDirStream;
 use crate::block_archive::{BlockHashListStream, BlockHashListStreamFromChannel};
@@ -103,8 +104,16 @@ impl SimpleFileBasedBlockArchive
 #[async_trait]
 impl BlockArchive for SimpleFileBasedBlockArchive
 {
-    async fn get_block<R>(&self, block_hash: BlockHash) -> Result<R> {
-        todo!()
+    async fn get_block(&self, block_hash: BlockHash) -> Result<Box<dyn AsyncRead + Unpin>> {
+        let path = self.get_path_from_hash(block_hash);
+        match File::open(path).await {
+            Ok(f) => Ok(Box::new(f)),
+            Err(e) => match e.kind() {
+                // if the file does not exist, return a BlockNotFound error
+                std::io::ErrorKind::NotFound => Err(Error::BlockNotFound),
+                _ => Err(e.into())
+            }
+        }
     }
 
     async fn block_exists(&self, block_hash: BlockHash) -> Result<bool> {
@@ -139,6 +148,7 @@ impl BlockArchive for SimpleFileBasedBlockArchive
 mod tests {
     use hex::FromHex;
     use mktemp::Temp;
+    use tokio::io::AsyncReadExt;
     use super::*;
 
     // Test the path generation from a block hash.
@@ -184,5 +194,35 @@ mod tests {
         let root = PathBuf::from("../test_data/nonexistent");
         let mut archive = SimpleFileBasedBlockArchive::new(root).await;
         assert!(archive.is_err());
+    }
+
+    // Test getting a block
+    #[tokio::test]
+    async fn test_get_block() {
+        let root = PathBuf::from("../test_data/blockarchive");
+        let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
+        let h = BlockHash::from_hex("00000000000000a86c0a6d7b3445ff9e64908d6417cd6b256dbc23efd01de26f").unwrap();
+        let mut block = archive.get_block(h).await.unwrap();
+        let mut buf = Vec::new();
+        block.read_to_end(&mut buf).await.unwrap();
+        assert_eq!(buf.len(), 227);
+    }
+
+    // Test unknown block, should return Error:BlockNotFound
+    #[tokio::test]
+    async fn test_unknown_block() {
+        let root = PathBuf::from("../test_data/blockarchive");
+        let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
+        let h = BlockHash::from_hex("0000000000000000094cc2ba6cc08514bcf9cbae26719d0a654a7754f3c75ef1").unwrap();
+        let block = archive.get_block(h).await;
+        match block {
+            Ok(_) => assert!(false),
+            Err(e) => {
+                match e {
+                    Error::BlockNotFound => assert!(true),
+                    _ => assert!(false)
+                }
+            }
+        }
     }
 }

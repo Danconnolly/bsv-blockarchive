@@ -19,8 +19,7 @@ pub trait BlockArchive {
     /// Get a block from the archive.
     ///
     /// Returns a reader for the encoded block.
-    async fn get_block<R>(&self, block_hash: BlockHash) -> Result<R>
-        where R: AsyncRead + Unpin + Send;
+    async fn get_block(&self, block_hash: BlockHash) -> Result<Box<dyn AsyncRead + Unpin>>;
 
     /// Check if a block exists in the archive.
     async fn block_exists(&self, block_hash: BlockHash) -> Result<bool>;
