@@ -116,13 +116,20 @@ impl BlockArchive for SimpleFileBasedBlockArchive
         }
     }
 
+    /// Check if a block exists in the archive.
     async fn block_exists(&self, block_hash: BlockHash) -> Result<bool> {
-        todo!()
+        let path = self.get_path_from_hash(block_hash);
+        match tokio::fs::metadata(path).await {
+            Ok(_) => Ok(true),
+            Err(e) => match e.kind() {
+                // if the file does not exist, return false
+                std::io::ErrorKind::NotFound => Ok(false),
+                _ => Err(e.into())
+            }
+        }
     }
 
-    async fn store_block<S>(&self, block: S) -> Result<()>
-        where S: AsyncRead + Unpin + Send
-    {
+    async fn store_block(&self, block: Box<dyn AsyncRead + Unpin + Send>) -> Result<()> {
         todo!()
     }
 
@@ -134,6 +141,7 @@ impl BlockArchive for SimpleFileBasedBlockArchive
         todo!()
     }
 
+    // todo: this function should not return blocks that are stored in the wrong location
     async fn block_list(&mut self) -> Result<Pin<Box<dyn BlockHashListStream<Item=BlockHash>>>> {
         // make the channel large enough to buffer all hashes, including testnet
         // so that the background task can collect all buffer hashes despite how slow the consumer is
@@ -224,5 +232,35 @@ mod tests {
                 }
             }
         }
+    }
+
+    // Test block exists
+    #[tokio::test]
+    async fn test_block_exists() {
+        let root = PathBuf::from("../test_data/blockarchive");
+        let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
+        let h = BlockHash::from_hex("00000000000000a86c0a6d7b3445ff9e64908d6417cd6b256dbc23efd01de26f").unwrap();
+        let exists = archive.block_exists(h).await.unwrap();
+        assert!(exists);
+    }
+
+    // Test unknown block does not exist
+    #[tokio::test]
+    async fn test_unknown_block_exists() {
+        let root = PathBuf::from("../test_data/blockarchive");
+        let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
+        let h = BlockHash::from_hex("0000000000000000094cc2ba6cc08514bcf9cbae26719d0a654a7754f3c75ef1").unwrap();
+        let exists = archive.block_exists(h).await.unwrap();
+        assert!(!exists);
+    }
+
+    // A block that is stored in the wrong location wont exist
+    #[tokio::test]
+    async fn test_wrong_location_block_exists() {
+        let root = PathBuf::from("../test_data/blockarchive");
+        let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
+        let h = BlockHash::from_hex("000000001ee3392a6b6ba0bf2480a0f6bf9cdaaefa331bc0dfb243523af41a44").unwrap();
+        let exists = archive.block_exists(h).await.unwrap();
+        assert!(!exists);
     }
 }

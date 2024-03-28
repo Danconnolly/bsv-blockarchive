@@ -19,6 +19,9 @@ pub trait BlockArchive {
     /// Get a block from the archive.
     ///
     /// Returns a reader for the encoded block.
+    ///
+    /// This function does not do any checking of the block, it merely returns a reader for the
+    /// bytes in the block.
     async fn get_block(&self, block_hash: BlockHash) -> Result<Box<dyn AsyncRead + Unpin>>;
 
     /// Check if a block exists in the archive.
@@ -27,8 +30,9 @@ pub trait BlockArchive {
     /// Store a block in the archive.
     ///
     /// Expects a reader for the encoded block.
-    async fn store_block<S>(&self, block: S) -> Result<()>
-        where S: AsyncRead + Unpin + Send;
+    ///
+    /// This function does not do any checking of the block, it stores the bytes of the block as is.
+    async fn store_block(&self, block: Box<dyn AsyncRead + Unpin + Send>) -> Result<()>;
 
     /// Get the size of a block in the archive.
     async fn block_size(&self, block_hash: BlockHash) -> Result<usize>;
