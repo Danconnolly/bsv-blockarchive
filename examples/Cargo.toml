@@ -9,13 +9,19 @@ tokio = { version = "1", features = ["full"] }
 async-trait = "0.1.75"
 tokio-stream = { version = "0.1", features = ["full"] }
 futures = "0.3.30"
-bsv-blockarchive = { path = "../lib" }
 env_logger = "0.10.1"
 clap = {  version = "4.5.2", features = ["derive"]}
 log = "0.4.21"
 
+bitcoinsv = { git = "https://github.com/Danconnolly/rust-bitcoinsv.git", package = "bitcoinsv" }
+bsv-blockarchive = { path = "../lib" }
+
 [[bin]]
 name = "lsblocks"
 path = "src/lsblocks.rs"
+
+[[bin]]
+name = "getblock"
+path = "src/getblock.rs"
 
 

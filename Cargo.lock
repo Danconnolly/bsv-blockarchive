@@ -109,7 +109,7 @@ dependencies = [
 [[package]]
 name = "bitcoinsv"
 version = "0.2.4"
-source = "git+https://github.com/Danconnolly/rust-bitcoinsv.git#e3a77e32ad729b81c6edd71494808697990d2f1f"
+source = "git+https://github.com/Danconnolly/rust-bitcoinsv.git#8d763fcc6a02d447df85cf71d61a4b4359560f31"
 dependencies = [
  "async-trait",
  "byteorder",
@@ -134,6 +134,7 @@ name = "blockarchive-examples"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bitcoinsv",
  "bsv-blockarchive",
  "clap",
  "env_logger",

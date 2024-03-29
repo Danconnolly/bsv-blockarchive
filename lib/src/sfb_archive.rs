@@ -114,7 +114,7 @@ impl SimpleFileBasedBlockArchive
 #[async_trait]
 impl BlockArchive for SimpleFileBasedBlockArchive
 {
-    async fn get_block(&self, block_hash: &BlockHash) -> Result<Box<dyn AsyncRead + Unpin>> {
+    async fn get_block(&self, block_hash: &BlockHash) -> Result<Box<dyn AsyncRead + Unpin + Send>> {
         let path = self.get_path_from_hash(block_hash);
         match File::open(path).await {
             Ok(f) => Ok(Box::new(f)),

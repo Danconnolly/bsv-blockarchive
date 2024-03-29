@@ -22,7 +22,7 @@ pub trait BlockArchive {
     ///
     /// This function does not do any checking of the block, it merely returns a reader for the
     /// bytes in the block.
-    async fn get_block(&self, block_hash: &BlockHash) -> Result<Box<dyn AsyncRead + Unpin>>;
+    async fn get_block(&self, block_hash: &BlockHash) -> Result<Box<dyn AsyncRead + Unpin + Send>>;
 
     /// Check if a block exists in the archive.
     async fn block_exists(&self, block_hash: &BlockHash) -> Result<bool>;
