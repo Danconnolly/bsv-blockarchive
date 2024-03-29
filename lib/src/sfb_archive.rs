@@ -143,7 +143,15 @@ impl BlockArchive for SimpleFileBasedBlockArchive
     }
 
     async fn block_size(&self, block_hash: &BlockHash) -> Result<usize> {
-        todo!()
+        let path = self.get_path_from_hash(block_hash);
+        match tokio::fs::metadata(path).await {
+            Ok(m) => Ok(m.len() as usize),
+            Err(e) => match e.kind() {
+                // if the file does not exist, return a BlockNotFound error
+                std::io::ErrorKind::NotFound => Err(Error::BlockNotFound),
+                _ => Err(e.into())
+            }
+        }
     }
 
     async fn block_header(&self, block_hash: &BlockHash) -> Result<BlockHeader> {
@@ -210,7 +218,7 @@ mod tests {
     #[tokio::test]
     async fn test_non_existent_root_dir() {
         let root = PathBuf::from("../test_data/nonexistent");
-        let mut archive = SimpleFileBasedBlockArchive::new(root).await;
+        let archive = SimpleFileBasedBlockArchive::new(root).await;
         assert!(archive.is_err());
     }
 
@@ -282,7 +290,7 @@ mod tests {
         let archive = SimpleFileBasedBlockArchive::new(root_path.clone()).await.unwrap();
         let h = BlockHash::from_hex("00000000000000a86c0a6d7b3445ff9e64908d6417cd6b256dbc23efd01de26f").unwrap();
         let block = "This is a block".as_bytes().to_vec();
-        let mut block_cursor = Box::new(Cursor::new(block.clone()));
+        let block_cursor = Box::new(Cursor::new(block.clone()));
         archive.store_block(&h, &mut (block_cursor as Box<dyn AsyncRead + Unpin + Send>)).await.unwrap();
         let exists = archive.block_exists(&h).await.unwrap();
         assert!(exists);
@@ -290,5 +298,59 @@ mod tests {
         let mut buf = Vec::new();
         stored_block.read_to_end(&mut buf).await.unwrap();
         assert_eq!(buf, block);
+    }
+
+    // Test storing a block that already exists
+    #[tokio::test]
+    async fn test_store_existing_block() {
+        let root = Temp::new_dir().unwrap();
+        let root_path = root.to_path_buf();
+        let archive = SimpleFileBasedBlockArchive::new(root_path.clone()).await.unwrap();
+        let h = BlockHash::from_hex("00000000000000a86c0a6d7b3445ff9e64908d6417cd6b256dbc23efd01de26f").unwrap();
+        let block = "This is a block".as_bytes().to_vec();
+        let block_cursor = Box::new(Cursor::new(block.clone()));
+        archive.store_block(&h, &mut (block_cursor as Box<dyn AsyncRead + Unpin + Send>)).await.unwrap();
+        let exists = archive.block_exists(&h).await.unwrap();
+        assert!(exists);
+        let block = "This is a new block".as_bytes().to_vec();
+        let block_cursor = Box::new(Cursor::new(block.clone()));
+        let store = archive.store_block(&h, &mut (block_cursor as Box<dyn AsyncRead + Unpin + Send>)).await;
+        match store {
+            Ok(_) => assert!(false),
+            Err(e) => {
+                match e {
+                    Error::BlockExists => assert!(true),
+                    _ => assert!(false)
+                }
+            }
+        }
+    }
+
+    // Test getting the size of a block
+    #[tokio::test]
+    async fn test_block_size() {
+        let root = PathBuf::from("../test_data/blockarchive");
+        let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
+        let h = BlockHash::from_hex("00000000000000a86c0a6d7b3445ff9e64908d6417cd6b256dbc23efd01de26f").unwrap();
+        let size = archive.block_size(&h).await.unwrap();
+        assert_eq!(size, 227);
+    }
+
+    // Test getting the size of an unknown block
+    #[tokio::test]
+    async fn test_unknown_block_size() {
+        let root = PathBuf::from("../test_data/blockarchive");
+        let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
+        let h = BlockHash::from_hex("0000000000000000094cc2ba6cc08514bcf9cbae26719d0a654a7754f3c75ef1").unwrap();
+        let size = archive.block_size(&h).await;
+        match size {
+            Ok(_) => assert!(false),
+            Err(e) => {
+                match e {
+                    Error::BlockNotFound => assert!(true),
+                    _ => assert!(false)
+                }
+            }
+        }
     }
 }
