@@ -66,9 +66,11 @@ impl SimpleFileBasedBlockArchive
     }
 
     // Get a list of all blocks in the background, sending results to the channel.
+    // Do not return blocks that are stored in the wrong location because these
+    // won't be retrievable by get_block().
     async fn block_list_bgrnd(root_path: PathBuf, transmit: tokio::sync::mpsc::Sender<BlockHash>) -> Result<()> {
         let mut stack = Vec::new();
-        stack.push(root_path);
+        stack.push(root_path.clone());
         while let Some(path) = stack.pop() {
             let dir = tokio::fs::read_dir(path).await?;
             let mut stream = ReadDirStream::new(dir);
@@ -86,6 +88,11 @@ impl SimpleFileBasedBlockArchive
                     let f_name = path.file_stem().unwrap().to_str().unwrap();
                     match BlockHash::from_hex(f_name) {
                         Ok(h) => {
+                            // ignore files that are not in the correct location
+                            let correct_path = root_path.join(&f_name[62..]).join(&f_name[60..62]).join(f_name).with_extension("bin");
+                            if path != correct_path {
+                                continue;
+                            }
                             match transmit.send(h).await {
                                 Ok(_) => {}
                                 Err(_) => return Ok(())     // this is not an error, the receiver has merely dropped
@@ -166,7 +173,18 @@ impl BlockArchive for SimpleFileBasedBlockArchive
         }
     }
 
-    // todo: this function should not return blocks that are stored in the wrong location
+    /// Get a list of all the blocks in the archive.
+    ///
+    /// It returns a stream of block hashes.
+    ///
+    /// Example code:
+    ///     let mut results = archive.block_list().await.unwrap();
+    ///     while let Some(block_hash) = results.next().await {
+    ///       println!("{}", block_hash);
+    ///     }
+    ///
+    /// This function does not return blocks that are stored in the wrong location because these
+    /// won't be retrievable by get_block().
     async fn block_list(&mut self) -> Result<Pin<Box<dyn BlockHashListStream<Item=BlockHash>>>> {
         // make the channel large enough to buffer all hashes, including testnet
         // so that the background task can collect all buffer hashes despite how slow the consumer is
@@ -195,6 +213,7 @@ mod tests {
     }
 
     // Test the block list function.
+    // two of the potentially ok block files are stored in the wrong location, so they shouldnt be returned
     #[tokio::test]
     async fn test_block_list() {
         let root = PathBuf::from("../test_data/blockarchive");
@@ -204,7 +223,7 @@ mod tests {
         while let Some(_) = results.next().await {
             count += 1;
         }
-        assert_eq!(count, 5);
+        assert_eq!(count, 3);
     }
 
     // Test the block list function with no blocks.
