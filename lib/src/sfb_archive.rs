@@ -31,6 +31,9 @@ const MAX_BLOCKS: usize = 2_000_000;
 /// Example code:
 ///     let root_dir = std::path::PathBuf::from("/mnt/blockstore/mainnet");
 ///     let mut archive= SimpleFileBasedBlockArchive::new(root_dir);
+///
+/// Note that if block files are stored in the wrong location then they are not recognised by the
+/// archive.
 #[derive(Debug)]
 pub struct SimpleFileBasedBlockArchive {
     /// The root of the file store
