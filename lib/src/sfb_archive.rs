@@ -55,7 +55,7 @@ impl SimpleFileBasedBlockArchive
     }
 
     // Get the path for a block.
-    fn get_path_from_hash(&self, hash: BlockHash) -> PathBuf {
+    fn get_path_from_hash(&self, hash: &BlockHash) -> PathBuf {
         let mut path = self.root_path.clone();
         let s: String = hash.encode_hex();
         path.push(&s[62..]);
@@ -104,7 +104,7 @@ impl SimpleFileBasedBlockArchive
 #[async_trait]
 impl BlockArchive for SimpleFileBasedBlockArchive
 {
-    async fn get_block(&self, block_hash: BlockHash) -> Result<Box<dyn AsyncRead + Unpin>> {
+    async fn get_block(&self, block_hash: &BlockHash) -> Result<Box<dyn AsyncRead + Unpin>> {
         let path = self.get_path_from_hash(block_hash);
         match File::open(path).await {
             Ok(f) => Ok(Box::new(f)),
@@ -117,7 +117,7 @@ impl BlockArchive for SimpleFileBasedBlockArchive
     }
 
     /// Check if a block exists in the archive.
-    async fn block_exists(&self, block_hash: BlockHash) -> Result<bool> {
+    async fn block_exists(&self, block_hash: &BlockHash) -> Result<bool> {
         let path = self.get_path_from_hash(block_hash);
         match tokio::fs::metadata(path).await {
             Ok(_) => Ok(true),
@@ -129,15 +129,24 @@ impl BlockArchive for SimpleFileBasedBlockArchive
         }
     }
 
-    async fn store_block(&self, block: Box<dyn AsyncRead + Unpin + Send>) -> Result<()> {
+    async fn store_block(&self, block_hash: &BlockHash, block: &mut Box<dyn AsyncRead + Unpin + Send>) -> Result<()> {
+        if self.block_exists(block_hash).await? {
+            return Err(Error::BlockExists);
+        }
+        let path = self.get_path_from_hash(block_hash);
+        // create the directory structure if it does not exist
+        tokio::fs::create_dir_all(path.parent().unwrap()).await?;
+        // store the block in a file
+        let mut file = File::create(path).await?;
+        tokio::io::copy(block, &mut file).await?;
+        Ok(())
+    }
+
+    async fn block_size(&self, block_hash: &BlockHash) -> Result<usize> {
         todo!()
     }
 
-    async fn block_size(&self, block_hash: BlockHash) -> Result<usize> {
-        todo!()
-    }
-
-    async fn block_header(&self, block_hash: BlockHash) -> Result<BlockHeader> {
+    async fn block_header(&self, block_hash: &BlockHash) -> Result<BlockHeader> {
         todo!()
     }
 
@@ -154,6 +163,7 @@ impl BlockArchive for SimpleFileBasedBlockArchive
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
     use hex::FromHex;
     use mktemp::Temp;
     use tokio::io::AsyncReadExt;
@@ -164,7 +174,7 @@ mod tests {
     async fn check_path_from_hash() {
         let s = SimpleFileBasedBlockArchive::new(PathBuf::from("../test_data/blockarchive")).await.unwrap();
         let h = BlockHash::from_hex("00000000000000000124a294b9e1e65224f0636ffd4dadac777bed5e709dc531").unwrap();
-        let path = s.get_path_from_hash(h);
+        let path = s.get_path_from_hash(&h);
         assert_eq!(path, PathBuf::from("../test_data/blockarchive/31/c5/00000000000000000124a294b9e1e65224f0636ffd4dadac777bed5e709dc531.bin"));
     }
 
@@ -210,7 +220,7 @@ mod tests {
         let root = PathBuf::from("../test_data/blockarchive");
         let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
         let h = BlockHash::from_hex("00000000000000a86c0a6d7b3445ff9e64908d6417cd6b256dbc23efd01de26f").unwrap();
-        let mut block = archive.get_block(h).await.unwrap();
+        let mut block = archive.get_block(&h).await.unwrap();
         let mut buf = Vec::new();
         block.read_to_end(&mut buf).await.unwrap();
         assert_eq!(buf.len(), 227);
@@ -222,7 +232,7 @@ mod tests {
         let root = PathBuf::from("../test_data/blockarchive");
         let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
         let h = BlockHash::from_hex("0000000000000000094cc2ba6cc08514bcf9cbae26719d0a654a7754f3c75ef1").unwrap();
-        let block = archive.get_block(h).await;
+        let block = archive.get_block(&h).await;
         match block {
             Ok(_) => assert!(false),
             Err(e) => {
@@ -240,7 +250,7 @@ mod tests {
         let root = PathBuf::from("../test_data/blockarchive");
         let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
         let h = BlockHash::from_hex("00000000000000a86c0a6d7b3445ff9e64908d6417cd6b256dbc23efd01de26f").unwrap();
-        let exists = archive.block_exists(h).await.unwrap();
+        let exists = archive.block_exists(&h).await.unwrap();
         assert!(exists);
     }
 
@@ -250,7 +260,7 @@ mod tests {
         let root = PathBuf::from("../test_data/blockarchive");
         let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
         let h = BlockHash::from_hex("0000000000000000094cc2ba6cc08514bcf9cbae26719d0a654a7754f3c75ef1").unwrap();
-        let exists = archive.block_exists(h).await.unwrap();
+        let exists = archive.block_exists(&h).await.unwrap();
         assert!(!exists);
     }
 
@@ -260,7 +270,25 @@ mod tests {
         let root = PathBuf::from("../test_data/blockarchive");
         let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
         let h = BlockHash::from_hex("000000001ee3392a6b6ba0bf2480a0f6bf9cdaaefa331bc0dfb243523af41a44").unwrap();
-        let exists = archive.block_exists(h).await.unwrap();
+        let exists = archive.block_exists(&h).await.unwrap();
         assert!(!exists);
+    }
+
+    // Test storing a block by storing on in a temporary location and then checking it is stored correctly
+    #[tokio::test]
+    async fn test_store_block() {
+        let root = Temp::new_dir().unwrap();
+        let root_path = root.to_path_buf();
+        let archive = SimpleFileBasedBlockArchive::new(root_path.clone()).await.unwrap();
+        let h = BlockHash::from_hex("00000000000000a86c0a6d7b3445ff9e64908d6417cd6b256dbc23efd01de26f").unwrap();
+        let block = "This is a block".as_bytes().to_vec();
+        let mut block_cursor: Box<dyn AsyncRead + Unpin + Send> = Box::new(Cursor::new(block.clone()));
+        archive.store_block(&h, &mut block_cursor).await.unwrap();
+        let exists = archive.block_exists(&h).await.unwrap();
+        assert!(exists);
+        let mut stored_block = archive.get_block(&h).await.unwrap();
+        let mut buf = Vec::new();
+        stored_block.read_to_end(&mut buf).await.unwrap();
+        assert_eq!(buf, block);
     }
 }
