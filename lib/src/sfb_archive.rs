@@ -157,7 +157,7 @@ impl BlockArchive for SimpleFileBasedBlockArchive
     async fn block_header(&self, block_hash: &BlockHash) -> Result<BlockHeader> {
         let path = self.get_path_from_hash(block_hash);
         match File::open(path).await {
-            Ok(mut file) => Ok(BlockHeader::decode_from(&mut file).await?),
+            Ok(mut file) => Ok(BlockHeader::from_binary(&mut file).await?),
             Err(e) => match e.kind() {
                 // if the file does not exist, return a BlockNotFound error
                 std::io::ErrorKind::NotFound => Err(Error::BlockNotFound),
