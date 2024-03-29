@@ -282,8 +282,8 @@ mod tests {
         let archive = SimpleFileBasedBlockArchive::new(root_path.clone()).await.unwrap();
         let h = BlockHash::from_hex("00000000000000a86c0a6d7b3445ff9e64908d6417cd6b256dbc23efd01de26f").unwrap();
         let block = "This is a block".as_bytes().to_vec();
-        let mut block_cursor: Box<dyn AsyncRead + Unpin + Send> = Box::new(Cursor::new(block.clone()));
-        archive.store_block(&h, &mut block_cursor).await.unwrap();
+        let mut block_cursor = Box::new(Cursor::new(block.clone()));
+        archive.store_block(&h, &mut (block_cursor as Box<dyn AsyncRead + Unpin + Send>)).await.unwrap();
         let exists = archive.block_exists(&h).await.unwrap();
         assert!(exists);
         let mut stored_block = archive.get_block(&h).await.unwrap();
