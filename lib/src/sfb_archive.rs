@@ -206,17 +206,17 @@ mod tests {
     // Test the path generation from a block hash.
     #[tokio::test]
     async fn check_path_from_hash() {
-        let s = SimpleFileBasedBlockArchive::new(PathBuf::from("../test_data/blockarchive")).await.unwrap();
+        let s = SimpleFileBasedBlockArchive::new(PathBuf::from("../testdata/blockarchive")).await.unwrap();
         let h = BlockHash::from_hex("00000000000000000124a294b9e1e65224f0636ffd4dadac777bed5e709dc531").unwrap();
         let path = s.get_path_from_hash(&h);
-        assert_eq!(path, PathBuf::from("../test_data/blockarchive/31/c5/00000000000000000124a294b9e1e65224f0636ffd4dadac777bed5e709dc531.bin"));
+        assert_eq!(path, PathBuf::from("../testdata/blockarchive/31/c5/00000000000000000124a294b9e1e65224f0636ffd4dadac777bed5e709dc531.bin"));
     }
 
     // Test the block list function.
     // two of the potentially ok block files are stored in the wrong location, so they shouldnt be returned
     #[tokio::test]
     async fn test_block_list() {
-        let root = PathBuf::from("../test_data/blockarchive");
+        let root = PathBuf::from("../testdata/blockarchive");
         let mut archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
         let mut results = archive.block_list().await.unwrap();
         let mut count = 0;
@@ -244,7 +244,7 @@ mod tests {
     // Test the archive with a non-existent root directory.
     #[tokio::test]
     async fn test_non_existent_root_dir() {
-        let root = PathBuf::from("../test_data/nonexistent");
+        let root = PathBuf::from("../testdata/nonexistent");
         let archive = SimpleFileBasedBlockArchive::new(root).await;
         assert!(archive.is_err());
     }
@@ -252,7 +252,7 @@ mod tests {
     // Test getting a block
     #[tokio::test]
     async fn test_get_block() {
-        let root = PathBuf::from("../test_data/blockarchive");
+        let root = PathBuf::from("../testdata/blockarchive");
         let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
         let h = BlockHash::from_hex("00000000000000a86c0a6d7b3445ff9e64908d6417cd6b256dbc23efd01de26f").unwrap();
         let mut block = archive.get_block(&h).await.unwrap();
@@ -264,7 +264,7 @@ mod tests {
     // Test unknown block, should return Error:BlockNotFound
     #[tokio::test]
     async fn test_unknown_block() {
-        let root = PathBuf::from("../test_data/blockarchive");
+        let root = PathBuf::from("../testdata/blockarchive");
         let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
         let h = BlockHash::from_hex("0000000000000000094cc2ba6cc08514bcf9cbae26719d0a654a7754f3c75ef1").unwrap();
         let block = archive.get_block(&h).await;
@@ -282,7 +282,7 @@ mod tests {
     // Test block exists
     #[tokio::test]
     async fn test_block_exists() {
-        let root = PathBuf::from("../test_data/blockarchive");
+        let root = PathBuf::from("../testdata/blockarchive");
         let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
         let h = BlockHash::from_hex("00000000000000a86c0a6d7b3445ff9e64908d6417cd6b256dbc23efd01de26f").unwrap();
         let exists = archive.block_exists(&h).await.unwrap();
@@ -292,7 +292,7 @@ mod tests {
     // Test unknown block does not exist
     #[tokio::test]
     async fn test_unknown_block_exists() {
-        let root = PathBuf::from("../test_data/blockarchive");
+        let root = PathBuf::from("../testdata/blockarchive");
         let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
         let h = BlockHash::from_hex("0000000000000000094cc2ba6cc08514bcf9cbae26719d0a654a7754f3c75ef1").unwrap();
         let exists = archive.block_exists(&h).await.unwrap();
@@ -302,7 +302,7 @@ mod tests {
     // A block that is stored in the wrong location wont exist
     #[tokio::test]
     async fn test_wrong_location_block_exists() {
-        let root = PathBuf::from("../test_data/blockarchive");
+        let root = PathBuf::from("../testdata/blockarchive");
         let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
         let h = BlockHash::from_hex("000000001ee3392a6b6ba0bf2480a0f6bf9cdaaefa331bc0dfb243523af41a44").unwrap();
         let exists = archive.block_exists(&h).await.unwrap();
@@ -356,7 +356,7 @@ mod tests {
     // Test getting the size of a block
     #[tokio::test]
     async fn test_block_size() {
-        let root = PathBuf::from("../test_data/blockarchive");
+        let root = PathBuf::from("../testdata/blockarchive");
         let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
         let h = BlockHash::from_hex("00000000000000a86c0a6d7b3445ff9e64908d6417cd6b256dbc23efd01de26f").unwrap();
         let size = archive.block_size(&h).await.unwrap();
@@ -366,7 +366,7 @@ mod tests {
     // Test getting the size of an unknown block
     #[tokio::test]
     async fn test_unknown_block_size() {
-        let root = PathBuf::from("../test_data/blockarchive");
+        let root = PathBuf::from("../testdata/blockarchive");
         let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
         let h = BlockHash::from_hex("0000000000000000094cc2ba6cc08514bcf9cbae26719d0a654a7754f3c75ef1").unwrap();
         let size = archive.block_size(&h).await;
@@ -384,7 +384,7 @@ mod tests {
     // Testing getting a header
     #[tokio::test]
     async fn test_block_header() {
-        let root = PathBuf::from("../test_data/blockarchive");
+        let root = PathBuf::from("../testdata/blockarchive");
         let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
         let h = BlockHash::from_hex("00000000000000a86c0a6d7b3445ff9e64908d6417cd6b256dbc23efd01de26f").unwrap();
         let header = archive.block_header(&h).await.unwrap();
@@ -396,7 +396,7 @@ mod tests {
     // test getting a header for an unknown block
     #[tokio::test]
     async fn test_unknown_block_header() {
-        let root = PathBuf::from("../test_data/blockarchive");
+        let root = PathBuf::from("../testdata/blockarchive");
         let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
         let h = BlockHash::from_hex("0000000000000000094cc2ba6cc08514bcf9cbae26719d0a654a7754f3c75ef1").unwrap();
         let header = archive.block_header(&h).await;
