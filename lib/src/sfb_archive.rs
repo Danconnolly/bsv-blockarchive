@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::pin::Pin;
 use async_trait::async_trait;
-use bitcoinsv::bitcoin::{BlockHash, BlockHeader};
+use bitcoinsv::bitcoin::{BlockHash, BlockHeader, Encodable};
 use tokio::io::AsyncRead;
 use crate::{BlockArchive, Error, Result};
 use hex::{FromHex, ToHex};
@@ -155,7 +155,15 @@ impl BlockArchive for SimpleFileBasedBlockArchive
     }
 
     async fn block_header(&self, block_hash: &BlockHash) -> Result<BlockHeader> {
-        todo!()
+        let path = self.get_path_from_hash(block_hash);
+        match File::open(path).await {
+            Ok(mut file) => Ok(BlockHeader::decode_from(&mut file).await?),
+            Err(e) => match e.kind() {
+                // if the file does not exist, return a BlockNotFound error
+                std::io::ErrorKind::NotFound => Err(Error::BlockNotFound),
+                _ => Err(e.into())
+            }
+        }
     }
 
     // todo: this function should not return blocks that are stored in the wrong location
@@ -344,6 +352,36 @@ mod tests {
         let h = BlockHash::from_hex("0000000000000000094cc2ba6cc08514bcf9cbae26719d0a654a7754f3c75ef1").unwrap();
         let size = archive.block_size(&h).await;
         match size {
+            Ok(_) => assert!(false),
+            Err(e) => {
+                match e {
+                    Error::BlockNotFound => assert!(true),
+                    _ => assert!(false)
+                }
+            }
+        }
+    }
+
+    // Testing getting a header
+    #[tokio::test]
+    async fn test_block_header() {
+        let root = PathBuf::from("../test_data/blockarchive");
+        let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
+        let h = BlockHash::from_hex("00000000000000a86c0a6d7b3445ff9e64908d6417cd6b256dbc23efd01de26f").unwrap();
+        let header = archive.block_header(&h).await.unwrap();
+        assert_eq!(header.version, 2);
+        assert_eq!(header.prev_hash, BlockHash::from_hex("0000000000000135aeabf9666fc9f1d5b8573685db070a5f1dfdd78f728a167a").unwrap());
+        assert_eq!(header.merkle_root, BlockHash::from_hex("949904a56c861ecde4b43c9fc4ad612b82d10e38bdd164ea820b8cd0e6a39178").unwrap());
+    }
+
+    // test getting a header for an unknown block
+    #[tokio::test]
+    async fn test_unknown_block_header() {
+        let root = PathBuf::from("../test_data/blockarchive");
+        let archive = SimpleFileBasedBlockArchive::new(root).await.unwrap();
+        let h = BlockHash::from_hex("0000000000000000094cc2ba6cc08514bcf9cbae26719d0a654a7754f3c75ef1").unwrap();
+        let header = archive.block_header(&h).await;
+        match header {
             Ok(_) => assert!(false),
             Err(e) => {
                 match e {
