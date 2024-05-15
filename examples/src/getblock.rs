@@ -3,7 +3,7 @@ use bsv_blockarchive::{BlockArchive, SimpleFileBasedBlockArchive};
 use bitcoinsv::bitcoin::{BlockHash, FromHex, FullBlockStream};
 use tokio_stream::StreamExt;
 
-/// Get a block from the archive.
+/// Get a block from the archive, listing all tx in the block.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
