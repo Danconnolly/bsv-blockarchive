@@ -2,9 +2,11 @@ use std::path::PathBuf;
 use std::collections::{BTreeSet, VecDeque};
 use std::io::Cursor;
 use bitcoinsv::bitcoin::{BlockHash, FullBlockStream, ToHex};
+use bitcoinsv_rpc::{Auth, Client, GetChainTipsResultStatus, RpcApi};
 use clap::{Parser, Subcommand};
 use bsv_blockarchive::{BlockArchive, SimpleFileBasedBlockArchive, Result, Error};
 use tokio_stream::StreamExt;
+use url::Url;
 
 /// A simple CLI for managing block archives.
 #[derive(Parser, Debug)]
@@ -36,6 +38,11 @@ enum Commands {
         /// Block hash.
         block_hash: BlockHash,
     },
+    /// Import blocks.
+    Import {
+        #[command(subcommand)]
+        import_cmd: ImportCommands,
+    },
     /// List all blocks in the archive.
     List,
 }
@@ -59,6 +66,17 @@ enum CheckCommands {
     /// involves reading every transaction, hashing the transaction, and checking that the merkle
     /// root of the transaction hashes matches the value in the header.
     Blocks,
+}
+
+#[derive(Subcommand, Debug)]
+enum ImportCommands {
+    /// Import blocks over an RPC connection from an SV Node.
+    Rpc {
+        /// RCP Connection URI.
+        ///
+        /// URI should be something like 'http://username:password@127.0.0.1:8332'
+        rpc_uri: String,
+    }
 }
 
 async fn list_blocks(root_dir: PathBuf) -> Result<()>{
@@ -207,6 +225,65 @@ async fn header(root_dir: PathBuf, block_hash: BlockHash, hex: bool) -> Result<(
     }
 }
 
+// connect to an SV node using RPC and import as many blocks as can be found
+// for every chain tip:
+//      follow chain down until find a block we already have, putting each block on a stack
+//      follow chain back up, popping off stack, fetch the block and store it in block archive
+async fn rpc_import(root_dir: PathBuf, rpc_uri: String, verbose: bool) -> Result<()> {
+    let uri;
+    let username;
+    let password;
+    match Url::parse(&*rpc_uri) {
+        Err(_e) => {
+            println!("could not parse RPC URI");
+            return Ok(());
+        }
+        Ok(url) => {
+            uri = format!("{}://{}:{}/", url.scheme(), url.host_str().unwrap(), url.port().unwrap());
+            username = String::from(url.username());
+            password = String::from(url.password().unwrap());
+        }
+    }
+    let archive= SimpleFileBasedBlockArchive::new(root_dir).await.unwrap();
+    let rpc_client = Client::new(&*uri, Auth::UserPass(username, password)).unwrap();
+    let chain_tips = rpc_client.get_chain_tips().unwrap();
+    let num_tips = chain_tips.len();
+    let mut known_hashes = BTreeSet::new();     // set of hashes that are known and we either have it already or will get it
+    let mut fetched = 0;
+    for t in chain_tips {
+        if verbose { println!("checking chain tip {}", t.hash);}
+        if t.status == GetChainTipsResultStatus::Active || t.status == GetChainTipsResultStatus::ValidFork
+            || t.status == GetChainTipsResultStatus::ValidHeaders {
+            // follow chain down
+            let mut fetch_hashes = Vec::new();              // stack of hashes of blocks to get
+            let mut hash = t.hash;
+            while ! known_hashes.contains(&hash) {
+                known_hashes.insert(hash.clone());
+                if ! archive.block_exists(&hash).await.unwrap() {
+                    fetch_hashes.push(hash.clone());
+                    let h = rpc_client.get_block_header(&hash).unwrap();
+                    hash = h.prev_hash;
+                }
+            }
+            if verbose { println!("found known hash {}, need to fetch {} blocks", hash, fetch_hashes.len());}
+            // fetch them
+            while let Some(h) = fetch_hashes.pop() {
+                let mut fb = rpc_client.get_block_binary(&h).await.unwrap();
+                archive.store_block(&h, &mut fb).await.unwrap();
+                if verbose { println!("stored block {}", h); }
+                fetched += 1
+            }
+        } else {
+            // todo: this ignores the entire chain tip, there might be blocks down there that we should get
+            if verbose { println!("ignoring chain tip {}", t.hash);}
+        }
+    }
+    println!("checked {} chain tips, imported {} blocks ", num_tips, fetched);
+    Ok(())
+}
+
+
+
 #[tokio::main]
 async fn main() {
     let args: Args = Args::parse();
@@ -227,6 +304,13 @@ async fn main() {
         }
         Commands::Header{hex, block_hash} => {
             header(root_dir, block_hash, hex).await.unwrap();
+        }
+        Commands::Import {import_cmd} => {
+            match import_cmd {
+                ImportCommands::Rpc {rpc_uri} => {
+                    rpc_import(root_dir, rpc_uri, args.verbose).await.unwrap();
+                }
+            }
         }
         Commands::List => {
             list_blocks(root_dir).await.unwrap();

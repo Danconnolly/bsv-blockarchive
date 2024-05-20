@@ -13,8 +13,11 @@ env_logger = "0.10.1"
 clap = {  version = "4.5.2", features = ["derive", "env"]}
 log = "0.4.21"
 
-bitcoinsv = { git = "https://github.com/Danconnolly/rust-bitcoinsv.git", package = "bitcoinsv" }
+bitcoinsv = "0.2.5"
+#bitcoinsv-rpc = "0.19.6"
+bitcoinsv-rpc = { path = "../../rust-bitcoinsv-rpc/client"}
 bsv-blockarchive = { path = "../lib" }
+url = "2.5.0"
 
 [[bin]]
 name = "blockarchive"
